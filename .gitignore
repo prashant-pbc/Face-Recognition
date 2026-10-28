@@ -156,6 +156,11 @@
 **/.flutter-plugins
 **/.flutter-plugins-dependencies
 
+# LiveFace project
+backend/data/
+backend/models/
+frontend/dist/
+
 # Compressed files
 *.zip
 *.rar

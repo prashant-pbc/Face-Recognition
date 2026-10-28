@@ -1,0 +1,192 @@
+import { useEffect, useMemo, useState } from "react";
+import { api } from "./api";
+import CameraView from "./CameraView.jsx";
+import { challengeMet, pickChallenge } from "./liveness";
+import { useCamera } from "./useCamera";
+
+const WAIT_MS = 1400;
+
+export default function Admin() {
+  const cam = useCamera();
+  const [name, setName] = useState("");
+  const [personId, setPersonId] = useState("");
+  const [notes, setNotes] = useState("");
+  const [people, setPeople] = useState([]);
+  const [challenge, setChallenge] = useState(() => pickChallenge());
+  const [phase, setPhase] = useState("idle");
+  const [frames, setFrames] = useState([]);
+  const [message, setMessage] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function refresh() {
+    setPeople(await api.people());
+  }
+
+  useEffect(() => {
+    refresh().catch((e) => setMessage(e.message));
+  }, []);
+
+  const met = useMemo(() => challengeMet(challenge.id, cam.live), [challenge.id, cam.live]);
+
+  useEffect(() => {
+    if (phase !== "challenge") return;
+    if (cam.live.faceCount !== 1) return;
+    if (!met) return;
+    const t = setTimeout(() => {
+      const shot = cam.snapshot();
+      setFrames((prev) => [...prev, shot].slice(0, 3));
+      setPhase("angles");
+    }, WAIT_MS);
+    return () => clearTimeout(t);
+  }, [phase, met, cam]);
+
+  function startEnroll() {
+    setMessage("");
+    if (!name.trim() || !personId.trim()) {
+      setMessage("Name and ID are required");
+      return;
+    }
+    cam.resetStats();
+    setFrames([]);
+    setChallenge(pickChallenge());
+    setPhase("challenge");
+  }
+
+  function grabAngle() {
+    if (cam.live.faceCount !== 1) {
+      setMessage("Keep one face in frame");
+      return;
+    }
+    setFrames((prev) => {
+      const next = [...prev, cam.snapshot()];
+      return next.slice(0, 3);
+    });
+  }
+
+  async function submit() {
+    if (frames.length < 2) {
+      setMessage("Capture at least 2 live frames");
+      return;
+    }
+    setBusy(true);
+    setMessage("");
+    try {
+      await api.enroll({
+        name: name.trim(),
+        person_id: personId.trim(),
+        notes,
+        images: frames,
+        challenge: challenge.id,
+        signals: cam.signals(),
+      });
+      setName("");
+      setPersonId("");
+      setNotes("");
+      setFrames([]);
+      setPhase("idle");
+      await refresh();
+    } catch (err) {
+      setMessage(err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function remove(id) {
+    await api.remove(id);
+    await refresh();
+  }
+
+  return (
+    <div className="page grid-2">
+      <section className="panel">
+        <h2>Live enrollment</h2>
+        <p className="hint">
+          A person must stand in front of this camera. Photos, phone screens, and replayed videos are rejected.
+        </p>
+        <div className="steps">
+          <span className={phase !== "idle" ? "done" : "now"} />
+          <span className={phase === "angles" || frames.length ? "done" : phase === "challenge" ? "now" : ""} />
+          <span className={frames.length >= 2 ? "done" : ""} />
+        </div>
+        <CameraView
+          videoRef={cam.videoRef}
+          canvasRef={cam.canvasRef}
+          live={cam.live}
+          ready={cam.ready}
+          error={cam.error}
+          challenge={phase === "idle" ? "fill details, then start" : challenge.label}
+        />
+        {phase === "challenge" && (
+          <div style={{ marginTop: 14 }}>
+            <p className="challenge">{challenge.label}</p>
+            <p className="muted">{met ? "Challenge seen. Hold still." : "Do the action in front of the camera."}</p>
+          </div>
+        )}
+        {phase === "angles" && (
+          <div className="row" style={{ marginTop: 14 }}>
+            <button className="btn" onClick={grabAngle} type="button">
+              Capture another angle ({frames.length}/3)
+            </button>
+            <button className="btn primary" onClick={submit} type="button" disabled={busy}>
+              {busy ? "Saving..." : "Save person"}
+            </button>
+          </div>
+        )}
+      </section>
+
+      <section className="panel">
+        <h2>Person details</h2>
+        <div className="form">
+          <label>
+            Full name
+            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Aisha Khan" />
+          </label>
+          <label>
+            Person ID
+            <input value={personId} onChange={(e) => setPersonId(e.target.value)} placeholder="STU-1042" />
+          </label>
+          <label>
+            Notes
+            <textarea rows={3} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Optional" />
+          </label>
+          {phase === "idle" && (
+            <button className="btn primary" type="button" onClick={startEnroll}>
+              Start live capture
+            </button>
+          )}
+          {phase !== "idle" && (
+            <button
+              className="btn ghost"
+              type="button"
+              onClick={() => {
+                setPhase("idle");
+                setFrames([]);
+              }}
+            >
+              Cancel
+            </button>
+          )}
+          {message && <div className="toast">{message}</div>}
+        </div>
+
+        <h3 style={{ marginTop: 28 }}>Enrolled ({people.length})</h3>
+        <div className="people">
+          {people.length === 0 && <p className="muted">No people yet.</p>}
+          {people.map((p) => (
+            <article className="person-card" key={p.id}>
+              {p.thumbnail_url ? <img src={p.thumbnail_url} alt="" /> : <div className="avatar" />}
+              <div>
+                <b>{p.name}</b>
+                <span>{p.person_id}</span>
+              </div>
+              <button className="btn ghost" type="button" onClick={() => remove(p.id)}>
+                Remove
+              </button>
+            </article>
+          ))}
+        </div>
+      </section>
+    </div>
+  );
+}
