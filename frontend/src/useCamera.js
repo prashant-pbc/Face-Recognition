@@ -22,6 +22,8 @@ export function useCamera() {
     frames: 0,
     motion: 0,
     yaw: 0,
+    minYaw: 0,
+    maxYaw: 0,
     pitch: 0,
     ear: 1,
     depthVar: 0,
@@ -64,6 +66,8 @@ export function useCamera() {
             const stats = statsRef.current;
             stats.frames += 1;
             stats.yaw = sample.yaw;
+            stats.minYaw = Math.min(stats.minYaw, sample.yaw);
+            stats.maxYaw = Math.max(stats.maxYaw, sample.yaw);
             stats.pitch = sample.pitch;
             stats.ear = sample.ear;
             stats.depthVar = sample.depthVar;
@@ -71,7 +75,7 @@ export function useCamera() {
             stats.faceCount = sample.faceCount;
             stats.motion = stats.motion * 0.85 + sample.motion * 0.15;
             if (sample.blink) stats.blinkCount += 1;
-            setLive({ ...stats });
+            if (stats.frames % 4 === 0) setLive({ ...stats });
             const ctx = overlay.getContext("2d");
             ctx.clearRect(0, 0, overlay.width, overlay.height);
             if (sample.landmarks) {
@@ -111,6 +115,8 @@ export function useCamera() {
       frames: 0,
       motion: 0,
       yaw: 0,
+      minYaw: 0,
+      maxYaw: 0,
       pitch: 0,
       ear: 1,
       depthVar: 0,
@@ -132,6 +138,8 @@ export function useCamera() {
       frames: s.frames,
       motion: Number(s.motion.toFixed(3)),
       yaw: Number(s.yaw.toFixed(2)),
+      minYaw: Number(s.minYaw.toFixed(2)),
+      maxYaw: Number(s.maxYaw.toFixed(2)),
       pitch: Number(s.pitch.toFixed(2)),
       ear: Number(s.ear.toFixed(3)),
       depthVar: Number(s.depthVar.toFixed(4)),

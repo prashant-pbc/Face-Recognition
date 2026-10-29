@@ -1,10 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "./api";
 import CameraView from "./CameraView.jsx";
-import { challengeMet, pickChallenge } from "./liveness";
+import { challengeHint, challengeMet, pickChallenge } from "./liveness";
 import { useCamera } from "./useCamera";
-
-const WAIT_MS = 1400;
 
 export default function Admin() {
   const cam = useCamera();
@@ -17,6 +15,7 @@ export default function Admin() {
   const [frames, setFrames] = useState([]);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const advancedRef = useRef(false);
 
   async function refresh() {
     setPeople(await api.people());
@@ -27,18 +26,21 @@ export default function Admin() {
   }, []);
 
   const met = useMemo(() => challengeMet(challenge.id, cam.live), [challenge.id, cam.live]);
+  const hint = useMemo(() => challengeHint(challenge.id, cam.live), [challenge.id, cam.live]);
 
   useEffect(() => {
-    if (phase !== "challenge") return;
+    if (phase !== "challenge") {
+      advancedRef.current = false;
+      return;
+    }
+    if (advancedRef.current) return;
     if (cam.live.faceCount !== 1) return;
     if (!met) return;
-    const t = setTimeout(() => {
-      const shot = cam.snapshot();
-      setFrames((prev) => [...prev, shot].slice(0, 3));
-      setPhase("angles");
-    }, WAIT_MS);
-    return () => clearTimeout(t);
-  }, [phase, met, cam]);
+    advancedRef.current = true;
+    const shot = cam.snapshot();
+    setFrames([shot]);
+    setPhase("angles");
+  }, [phase, met, cam.live.faceCount]);
 
   function startEnroll() {
     setMessage("");
@@ -46,6 +48,7 @@ export default function Admin() {
       setMessage("Name and ID are required");
       return;
     }
+    advancedRef.current = false;
     cam.resetStats();
     setFrames([]);
     setChallenge(pickChallenge());
@@ -120,7 +123,7 @@ export default function Admin() {
         {phase === "challenge" && (
           <div style={{ marginTop: 14 }}>
             <p className="challenge">{challenge.label}</p>
-            <p className="muted">{met ? "Challenge seen. Hold still." : "Do the action in front of the camera."}</p>
+            <p className="muted">{met ? "Challenge seen. Capturing..." : hint}</p>
           </div>
         )}
         {phase === "angles" && (

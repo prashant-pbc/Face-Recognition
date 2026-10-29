@@ -10,6 +10,8 @@ def validate_signals(challenge: str, signals: dict) -> tuple[bool, str]:
 
     blink_count = int(signals.get("blinkCount") or 0)
     yaw = float(signals.get("yaw") or 0)
+    min_yaw = float(signals.get("minYaw") if signals.get("minYaw") is not None else yaw)
+    max_yaw = float(signals.get("maxYaw") if signals.get("maxYaw") is not None else yaw)
     pitch = float(signals.get("pitch") or 0)
     ear = float(signals.get("ear") or 0)
     frames = int(signals.get("frames") or 0)
@@ -17,21 +19,19 @@ def validate_signals(challenge: str, signals: dict) -> tuple[bool, str]:
     depth_var = float(signals.get("depthVar") or 0)
     screen_hint = float(signals.get("screenHint") or 0)
 
-    if frames < 12:
+    if frames < 8:
         return False, "too_few_frames"
-    if abs(pitch) > 28:
+    if abs(pitch) > 40:
         return False, "look_at_camera"
 
     if challenge == "blink":
-        if blink_count < 1 or ear > 0.28:
+        if blink_count < 1:
             return False, "blink_not_detected"
-        if motion < 0.35:
-            return False, "no_natural_motion"
     elif challenge == "turn_left":
-        if yaw > -12:
+        if max_yaw < 8:
             return False, "turn_left_not_detected"
     elif challenge == "turn_right":
-        if yaw < 12:
+        if min_yaw > -8:
             return False, "turn_right_not_detected"
 
     if screen_hint > 0.72:

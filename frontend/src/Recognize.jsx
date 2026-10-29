@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { api } from "./api";
 import CameraView from "./CameraView.jsx";
-import { challengeMet, pickChallenge } from "./liveness";
+import { challengeHint, challengeMet, pickChallenge } from "./liveness";
 import { useCamera } from "./useCamera";
 
 const REASONS = {
@@ -30,6 +30,7 @@ export default function Recognize() {
   const [auto, setAuto] = useState(true);
 
   const met = useMemo(() => challengeMet(challenge.id, cam.live), [challenge.id, cam.live]);
+  const hint = useMemo(() => challengeHint(challenge.id, cam.live), [challenge.id, cam.live]);
 
   async function scan() {
     if (busy || !cam.ready) return;
@@ -90,7 +91,7 @@ export default function Recognize() {
           <div>
             <div className="kicker">Waiting</div>
             <p className="challenge">{challenge.label}</p>
-            <p className="muted">{met ? "Challenge complete. Checking liveness..." : "Stand in front of the camera and follow the prompt."}</p>
+            <p className="muted">{met ? "Challenge complete. Checking liveness..." : hint}</p>
           </div>
         )}
         {status === "match" && result.person && (

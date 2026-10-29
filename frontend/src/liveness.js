@@ -24,7 +24,8 @@ function yawPitch(lm) {
   const r = lm[263];
   const nose = lm[1];
   const midX = (l.x + r.x) / 2;
-  const yaw = (nose.x - midX) * 220;
+  // Positive yaw = person turned to their LEFT (mirrored preview left).
+  const yaw = (nose.x - midX) * 400;
   const brow = lm[10];
   const chin = lm[152];
   const midY = (brow.y + chin.y) / 2;
@@ -100,9 +101,27 @@ export function pickChallenge() {
   return CHALLENGES[Math.floor(Math.random() * CHALLENGES.length)];
 }
 
+const TURN_NEED = 8;
+
 export function challengeMet(id, sample) {
-  if (id === "blink") return sample.blinkCount >= 2;
-  if (id === "turn_left") return sample.yaw <= -16;
-  if (id === "turn_right") return sample.yaw >= 16;
+  if (id === "blink") return (sample.blinkCount || 0) >= 2;
+  if (id === "turn_left") return (sample.maxYaw || 0) >= TURN_NEED;
+  if (id === "turn_right") return (sample.minYaw || 0) <= -TURN_NEED;
   return false;
+}
+
+export function challengeHint(id, sample) {
+  if (id === "blink") {
+    const n = sample.blinkCount || 0;
+    return n >= 2 ? "Blink seen" : `Blink ${n}/2`;
+  }
+  if (id === "turn_left") {
+    const v = Math.max(0, sample.maxYaw || 0);
+    return v >= TURN_NEED ? "Left turn seen" : `Turn left more (${Math.round((v / TURN_NEED) * 100)}%)`;
+  }
+  if (id === "turn_right") {
+    const v = Math.max(0, -(sample.minYaw || 0));
+    return v >= TURN_NEED ? "Right turn seen" : `Turn right more (${Math.round((v / TURN_NEED) * 100)}%)`;
+  }
+  return "";
 }
