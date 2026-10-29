@@ -36,17 +36,25 @@ export default function App() {
   }
 
   if (page === "admin" && !admin) {
-    return <Login onLogin={(name) => { setAdmin(name); setPage("admin"); }} />;
+    return (
+      <Login
+        onLogin={(name) => {
+          setAdmin(name);
+          setPage("admin");
+        }}
+        onBack={() => setPage("recognize")}
+      />
+    );
   }
 
   return (
     <div className="app">
       <header className="topbar">
         <div className="brand">
-          <div className="mark">AG</div>
+          <div className="mark">LF</div>
           <div>
-            <h1>AEGIS</h1>
-            <p>Live identity gate · sqlite3.db</p>
+            <h1>LiveFace Gate</h1>
+            <p>Real person only · photo and video blocked</p>
           </div>
         </div>
         <nav className="nav">

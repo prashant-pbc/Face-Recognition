@@ -53,7 +53,7 @@ if not exist "%FRONTEND%\node_modules\" (
 )
 
 echo Starting API on http://127.0.0.1:8000
-start "AEGIS API" /D "%BACKEND%" "%PY%" -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+start "LiveFace Gate API" /D "%BACKEND%" "%PY%" -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 
 echo Starting UI on http://localhost:5173
 pushd "%FRONTEND%"

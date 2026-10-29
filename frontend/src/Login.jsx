@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { api, setToken } from "./api";
 
-export default function Login({ onLogin }) {
+export default function Login({ onLogin, onBack }) {
   const [username, setUsername] = useState("admin");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -25,9 +25,9 @@ export default function Login({ onLogin }) {
   return (
     <div className="login-wrap">
       <form className="login-card" onSubmit={submit}>
-        <div className="mark">AG</div>
-        <h1>AEGIS Admin</h1>
-        <p className="hint">Sign in to enroll people into the live identity gate. Recognition stays public.</p>
+        <div className="mark">LF</div>
+        <h1>LiveFace Gate Admin</h1>
+        <p className="hint">Sign in to enroll people. Recognition stays public.</p>
         <div className="form">
           <label>
             Username
@@ -43,9 +43,14 @@ export default function Login({ onLogin }) {
             />
           </label>
           {error && <div className="toast">{error}</div>}
-          <button className="btn primary" type="submit" disabled={busy}>
-            {busy ? "Signing in..." : "Enter control room"}
-          </button>
+          <div className="row">
+            <button className="btn ghost" type="button" onClick={onBack}>
+              Back
+            </button>
+            <button className="btn primary" type="submit" disabled={busy}>
+              {busy ? "Signing in..." : "Enter control room"}
+            </button>
+          </div>
         </div>
       </form>
     </div>

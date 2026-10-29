@@ -1,4 +1,4 @@
-# AEGIS Live Face Gate — Desi Style Complete Tutorial
+# LiveFace Gate — Desi Style Complete Tutorial
 
 Bhai, yeh app attendance system nahi hai.
 Yeh simple baat hai: **camera ke saamne asli insaan hai ya photo/phone video hai**, aur agar asli insaan enrolled hai to uski details dikhao.
