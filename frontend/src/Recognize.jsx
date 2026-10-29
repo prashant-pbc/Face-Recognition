@@ -11,15 +11,15 @@ const REASONS = {
   too_blurry: "Hold still",
   face_near_edge: "Center your face",
   blink_not_detected: "Blink was not a real blink",
-  turn_left_not_detected: "Turn left more",
-  turn_right_not_detected: "Turn right more",
+  turn_left_not_detected: "Turn your head more",
+  turn_right_not_detected: "Turn your head more",
   spoof_detected: "Photo, screen, or video — not a live person",
   screen_like_texture: "Looks like a screen, not a real face",
   flat_image: "Flat image detected",
   no_natural_motion: "A still photo cannot pass",
   too_few_frames: "Stay in frame a bit longer",
   look_at_camera: "Look at the camera",
-  unknown_person: "Live face, but not in the database",
+  unknown_person: "Live face, but not in sqlite3.db",
 };
 
 export default function Recognize() {
@@ -66,7 +66,8 @@ export default function Recognize() {
       <section className="panel">
         <h2>Live recognition</h2>
         <p className="hint">
-          Details appear only for a real person in front of this camera who is already enrolled. A photo or a video on a phone will not match.
+          <span className="pulse" />
+          Details appear only for a real person in front of this camera who is already in sqlite3.db.
         </p>
         <CameraView
           videoRef={cam.videoRef}
@@ -106,7 +107,7 @@ export default function Recognize() {
         {status === "unknown" && (
           <div>
             <div className="kicker status-unknown">Unknown live face</div>
-            <h2>Not in database</h2>
+            <h2>Not in sqlite3.db</h2>
             <p className="muted">This looks like a real person, but they have not been enrolled.</p>
           </div>
         )}

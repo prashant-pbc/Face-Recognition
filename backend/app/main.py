@@ -12,14 +12,17 @@ from sqlalchemy.orm import Session
 
 from . import models
 from .anti_spoof import get_spoof
+from .auth import create_session, current_admin, seed_admin, verify_password
 from .config import MATCH_THRESHOLD, THUMB_DIR
-from .db import Base, engine, get_db
+from .db import Base, SessionLocal, engine, get_db
 from .face_engine import get_engine
 from .image_util import crop_with_margin, decode_image
 from .liveness import CHALLENGES, validate_signals
-from .schemas import AnalyzeIn, EnrollIn, PersonUpdate
+from .schemas import AnalyzeIn, EnrollIn, LoginIn, PersonUpdate
 
 Base.metadata.create_all(bind=engine)
+with SessionLocal() as _boot:
+    seed_admin(_boot)
 
 app = FastAPI(title="LiveFace Gate")
 app.add_middleware(
@@ -147,17 +150,41 @@ def log_event(db: Session, result: str, reason: str, person_pk=None, similarity=
 
 @app.get("/api/health")
 def health():
-    return {"ok": True}
+    return {"ok": True, "db": "sqlite3.db"}
+
+
+@app.post("/api/auth/login")
+def login(body: LoginIn, db: Session = Depends(get_db)):
+    username = (body.username or "").strip()
+    admin = db.query(models.AdminUser).filter(models.AdminUser.username == username).first()
+    if not admin or not verify_password(body.password or "", admin.password_salt, admin.password_hash):
+        raise HTTPException(401, "Invalid username or password")
+    token = create_session(db, admin)
+    return {"token": token, "username": admin.username}
+
+
+@app.get("/api/auth/me")
+def me(admin: models.AdminUser = Depends(current_admin)):
+    return {"username": admin.username}
+
+
+@app.post("/api/auth/logout")
+def logout(
+    authorization: str | None = None,
+    db: Session = Depends(get_db),
+    admin: models.AdminUser = Depends(current_admin),
+):
+    return {"ok": True, "username": admin.username}
 
 
 @app.get("/api/people")
-def list_people(db: Session = Depends(get_db)):
+def list_people(db: Session = Depends(get_db), admin: models.AdminUser = Depends(current_admin)):
     rows = db.query(models.Person).order_by(models.Person.created_at.desc()).all()
     return [person_out(p) for p in rows]
 
 
 @app.get("/api/people/{pk}")
-def get_person(pk: int, db: Session = Depends(get_db)):
+def get_person(pk: int, db: Session = Depends(get_db), admin: models.AdminUser = Depends(current_admin)):
     p = db.query(models.Person).filter(models.Person.id == pk).first()
     if not p:
         raise HTTPException(404, "Person not found")
@@ -165,7 +192,12 @@ def get_person(pk: int, db: Session = Depends(get_db)):
 
 
 @app.patch("/api/people/{pk}")
-def update_person(pk: int, body: PersonUpdate, db: Session = Depends(get_db)):
+def update_person(
+    pk: int,
+    body: PersonUpdate,
+    db: Session = Depends(get_db),
+    admin: models.AdminUser = Depends(current_admin),
+):
     p = db.query(models.Person).filter(models.Person.id == pk).first()
     if not p:
         raise HTTPException(404, "Person not found")
@@ -179,7 +211,11 @@ def update_person(pk: int, body: PersonUpdate, db: Session = Depends(get_db)):
 
 
 @app.delete("/api/people/{pk}")
-def delete_person(pk: int, db: Session = Depends(get_db)):
+def delete_person(
+    pk: int,
+    db: Session = Depends(get_db),
+    admin: models.AdminUser = Depends(current_admin),
+):
     p = db.query(models.Person).filter(models.Person.id == pk).first()
     if not p:
         raise HTTPException(404, "Person not found")
@@ -251,7 +287,11 @@ def analyze(body: AnalyzeIn, db: Session = Depends(get_db)):
 
 
 @app.post("/api/enroll")
-def enroll(body: EnrollIn, db: Session = Depends(get_db)):
+def enroll(
+    body: EnrollIn,
+    db: Session = Depends(get_db),
+    admin: models.AdminUser = Depends(current_admin),
+):
     name = (body.name or "").strip()
     person_id = (body.person_id or "").strip()
     if not name or not person_id:
@@ -261,7 +301,6 @@ def enroll(body: EnrollIn, db: Session = Depends(get_db)):
     if db.query(models.Person).filter(models.Person.person_id == person_id).first():
         raise HTTPException(409, "A person with this ID already exists")
 
-    engine = get_engine()
     vectors = []
     thumb = None
     last_spoof = 0.0
@@ -272,12 +311,17 @@ def enroll(body: EnrollIn, db: Session = Depends(get_db)):
         except Exception as exc:
             raise HTTPException(400, f"Bad image: {exc}") from exc
 
-        inspected = inspect_frame(
-            image,
-            body.challenge,
-            body.signals,
-            require_challenge=(idx == 0),
-        )
+        try:
+            inspected = inspect_frame(
+                image,
+                body.challenge,
+                body.signals,
+                require_challenge=(idx == 0),
+            )
+        except FileNotFoundError as exc:
+            raise HTTPException(500, f"Face model missing: {exc}") from exc
+        except Exception as exc:
+            raise HTTPException(400, f"Could not read live face ({exc})") from exc
         if not inspected["ok"]:
             raise HTTPException(400, f"Live face required ({inspected['reason']})")
         last_spoof = float((inspected.get("spoof") or {}).get("real") or 0)
@@ -304,8 +348,27 @@ def enroll(body: EnrollIn, db: Session = Depends(get_db)):
     return person_out(person)
 
 
+@app.get("/api/stats")
+def stats(db: Session = Depends(get_db), admin: models.AdminUser = Depends(current_admin)):
+    people_n = db.query(models.Person).count()
+    events = db.query(models.ScanEvent).all()
+    counts = {"match": 0, "reject": 0, "unknown": 0, "enroll": 0}
+    for e in events:
+        if e.result in counts:
+            counts[e.result] += 1
+    return {
+        "people": people_n,
+        "scans": len(events),
+        "matches": counts["match"],
+        "rejects": counts["reject"],
+        "unknown": counts["unknown"],
+        "enrolls": counts["enroll"],
+        "db": "sqlite3.db",
+    }
+
+
 @app.get("/api/events")
-def events(db: Session = Depends(get_db)):
+def events(db: Session = Depends(get_db), admin: models.AdminUser = Depends(current_admin)):
     rows = (
         db.query(models.ScanEvent)
         .order_by(models.ScanEvent.created_at.desc())

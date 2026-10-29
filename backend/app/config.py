@@ -4,7 +4,11 @@ ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = ROOT / "data"
 MODEL_DIR = ROOT / "models"
 THUMB_DIR = DATA_DIR / "thumbs"
-DB_PATH = DATA_DIR / "liveface.db"
+DB_PATH = DATA_DIR / "sqlite3.db"
+
+ADMIN_USERNAME = "admin"
+ADMIN_PASSWORD = "liveface-admin"
+SESSION_HOURS = 12
 
 YUNET_FILE = "face_detection_yunet_2023mar.onnx"
 SFACE_FILE = "face_recognition_sface_2021dec.onnx"

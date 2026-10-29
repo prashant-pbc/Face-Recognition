@@ -7,7 +7,7 @@ from .db import Base
 
 
 def _now():
-    return datetime.now(timezone.utc)
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 class Person(Base):
@@ -18,7 +18,7 @@ class Person(Base):
     person_id: Mapped[str] = mapped_column(String(80), nullable=False, unique=True)
     notes: Mapped[str] = mapped_column(Text, default="", nullable=False)
     thumbnail_path: Mapped[str] = mapped_column(String(260), default="", nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
 
     embeddings: Mapped[list["FaceEmbedding"]] = relationship(
         back_populates="person", cascade="all, delete-orphan"
@@ -31,9 +31,29 @@ class FaceEmbedding(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     person_pk: Mapped[int] = mapped_column(ForeignKey("people.id"), nullable=False)
     vector: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
 
     person: Mapped[Person] = relationship(back_populates="embeddings")
+
+
+class AdminUser(Base):
+    __tablename__ = "admins"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    username: Mapped[str] = mapped_column(String(80), nullable=False, unique=True)
+    password_salt: Mapped[str] = mapped_column(String(64), nullable=False)
+    password_hash: Mapped[str] = mapped_column(String(128), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+
+
+class AdminSession(Base):
+    __tablename__ = "admin_sessions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    token: Mapped[str] = mapped_column(String(80), nullable=False, unique=True)
+    admin_pk: Mapped[int] = mapped_column(ForeignKey("admins.id"), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
 
 
 class ScanEvent(Base):
@@ -45,4 +65,4 @@ class ScanEvent(Base):
     person_pk: Mapped[int | None] = mapped_column(ForeignKey("people.id"), nullable=True)
     similarity: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
     spoof_score: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)

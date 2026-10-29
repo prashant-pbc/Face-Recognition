@@ -22,6 +22,11 @@ class AnalyzeIn(BaseModel):
     mode: str = "recognize"
 
 
+class LoginIn(BaseModel):
+    username: str
+    password: str
+
+
 class EnrollIn(BaseModel):
     name: str
     person_id: str

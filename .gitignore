@@ -159,6 +159,7 @@
 # LiveFace project
 backend/data/
 backend/models/
+backend/.venv/
 frontend/dist/
 
 # Compressed files
