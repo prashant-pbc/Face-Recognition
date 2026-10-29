@@ -1,6 +1,28 @@
 import { useEffect, useRef, useState } from "react";
 import { analyzeLandmarks, createLandmarker } from "./liveness";
 
+const CALIB_FRAMES = 18;
+
+function emptyStats() {
+  return {
+    blinkCount: 0,
+    frames: 0,
+    motion: 0,
+    yaw: 0,
+    relYaw: 0,
+    minYaw: 0,
+    maxYaw: 0,
+    yawRange: 0,
+    pitch: 0,
+    ear: 1,
+    depthVar: 0,
+    screenHint: 0,
+    faceCount: 0,
+    eyesClosed: false,
+    ready: false,
+  };
+}
+
 export function captureFrame(video) {
   const canvas = document.createElement("canvas");
   const w = video.videoWidth || 640;
@@ -17,19 +39,8 @@ export function useCamera() {
   const canvasRef = useRef(null);
   const landmarkerRef = useRef(null);
   const prevRef = useRef(null);
-  const statsRef = useRef({
-    blinkCount: 0,
-    frames: 0,
-    motion: 0,
-    yaw: 0,
-    minYaw: 0,
-    maxYaw: 0,
-    pitch: 0,
-    ear: 1,
-    depthVar: 0,
-    screenHint: 0,
-    faceCount: 0,
-  });
+  const statsRef = useRef(emptyStats());
+  const calibRef = useRef({ n: 0, ear: 0, blink: 0, yaw: 0, ready: false, earMean: 0.25, blinkMean: 0, yawMean: 0 });
   const [ready, setReady] = useState(false);
   const [error, setError] = useState("");
   const [live, setLive] = useState(statsRef.current);
@@ -61,21 +72,44 @@ export function useCamera() {
             overlay.height = videoEl.videoHeight;
             const ts = performance.now();
             const result = landmarker.detectForVideo(videoEl, ts);
-            const sample = analyzeLandmarks(result, prevRef.current);
+            const calib = calibRef.current;
+            const base = calib.ready
+              ? { ready: true, ear: calib.earMean, blinkScore: calib.blinkMean, yaw: calib.yawMean }
+              : { ready: false, ear: 0.25, blinkScore: 0, yaw: 0 };
+            const sample = analyzeLandmarks(result, prevRef.current, base);
             prevRef.current = sample;
+
+            if (sample.faceCount === 1 && !calib.ready) {
+              calib.n += 1;
+              calib.ear += sample.ear;
+              calib.blink += sample.blinkScore;
+              calib.yaw += sample.yaw;
+              if (calib.n >= CALIB_FRAMES) {
+                calib.ready = true;
+                calib.earMean = calib.ear / calib.n;
+                calib.blinkMean = calib.blink / calib.n;
+                calib.yawMean = calib.yaw / calib.n;
+              }
+            }
+
             const stats = statsRef.current;
             stats.frames += 1;
+            stats.ready = calib.ready;
             stats.yaw = sample.yaw;
-            stats.minYaw = Math.min(stats.minYaw, sample.yaw);
-            stats.maxYaw = Math.max(stats.maxYaw, sample.yaw);
+            stats.relYaw = sample.relYaw;
+            stats.minYaw = Math.min(stats.minYaw, sample.relYaw);
+            stats.maxYaw = Math.max(stats.maxYaw, sample.relYaw);
+            stats.yawRange = stats.maxYaw - stats.minYaw;
             stats.pitch = sample.pitch;
             stats.ear = sample.ear;
             stats.depthVar = sample.depthVar;
             stats.screenHint = sample.screenHint;
             stats.faceCount = sample.faceCount;
             stats.motion = stats.motion * 0.85 + sample.motion * 0.15;
+            stats.eyesClosed = sample.eyesClosed;
             if (sample.blink) stats.blinkCount += 1;
-            if (stats.frames % 4 === 0) setLive({ ...stats });
+            if (sample.blink || stats.frames % 2 === 0) setLive({ ...stats });
+
             const ctx = overlay.getContext("2d");
             ctx.clearRect(0, 0, overlay.width, overlay.height);
             if (sample.landmarks) {
@@ -110,19 +144,8 @@ export function useCamera() {
   }, []);
 
   function resetStats() {
-    statsRef.current = {
-      blinkCount: 0,
-      frames: 0,
-      motion: 0,
-      yaw: 0,
-      minYaw: 0,
-      maxYaw: 0,
-      pitch: 0,
-      ear: 1,
-      depthVar: 0,
-      screenHint: 0,
-      faceCount: 0,
-    };
+    statsRef.current = emptyStats();
+    calibRef.current = { n: 0, ear: 0, blink: 0, yaw: 0, ready: false, earMean: 0.25, blinkMean: 0, yawMean: 0 };
     prevRef.current = null;
     setLive({ ...statsRef.current });
   }
@@ -137,9 +160,10 @@ export function useCamera() {
       blinkCount: s.blinkCount,
       frames: s.frames,
       motion: Number(s.motion.toFixed(3)),
-      yaw: Number(s.yaw.toFixed(2)),
+      yaw: Number(s.relYaw.toFixed(2)),
       minYaw: Number(s.minYaw.toFixed(2)),
       maxYaw: Number(s.maxYaw.toFixed(2)),
+      yawRange: Number(s.yawRange.toFixed(2)),
       pitch: Number(s.pitch.toFixed(2)),
       ear: Number(s.ear.toFixed(3)),
       depthVar: Number(s.depthVar.toFixed(4)),

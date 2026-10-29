@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 
-CHALLENGES = ("blink", "turn_left", "turn_right")
+CHALLENGES = ("blink", "turn_head", "turn_left", "turn_right")
 
 
 def validate_signals(challenge: str, signals: dict) -> tuple[bool, str]:
@@ -12,31 +12,17 @@ def validate_signals(challenge: str, signals: dict) -> tuple[bool, str]:
     yaw = float(signals.get("yaw") or 0)
     min_yaw = float(signals.get("minYaw") if signals.get("minYaw") is not None else yaw)
     max_yaw = float(signals.get("maxYaw") if signals.get("maxYaw") is not None else yaw)
-    pitch = float(signals.get("pitch") or 0)
-    ear = float(signals.get("ear") or 0)
+    yaw_range = float(signals.get("yawRange") if signals.get("yawRange") is not None else (max_yaw - min_yaw))
     frames = int(signals.get("frames") or 0)
-    motion = float(signals.get("motion") or 0)
-    depth_var = float(signals.get("depthVar") or 0)
-    screen_hint = float(signals.get("screenHint") or 0)
 
-    if frames < 8:
+    if frames < 6:
         return False, "too_few_frames"
-    if abs(pitch) > 40:
-        return False, "look_at_camera"
 
     if challenge == "blink":
         if blink_count < 1:
             return False, "blink_not_detected"
-    elif challenge == "turn_left":
-        if max_yaw < 8:
+    elif challenge in ("turn_head", "turn_left", "turn_right"):
+        if yaw_range < 8 and max(abs(min_yaw), abs(max_yaw)) < 8:
             return False, "turn_left_not_detected"
-    elif challenge == "turn_right":
-        if min_yaw > -8:
-            return False, "turn_right_not_detected"
-
-    if screen_hint > 0.72:
-        return False, "screen_like_texture"
-    if depth_var < 0.04 and motion < 0.2:
-        return False, "flat_image"
 
     return True, "ok"

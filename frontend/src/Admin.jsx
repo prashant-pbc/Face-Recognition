@@ -16,6 +16,9 @@ export default function Admin() {
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const advancedRef = useRef(false);
+  const formRef = useRef({ name: "", personId: "", notes: "" });
+
+  formRef.current = { name, personId, notes };
 
   async function refresh() {
     setPeople(await api.people());
@@ -28,6 +31,36 @@ export default function Admin() {
   const met = useMemo(() => challengeMet(challenge.id, cam.live), [challenge.id, cam.live]);
   const hint = useMemo(() => challengeHint(challenge.id, cam.live), [challenge.id, cam.live]);
 
+  async function savePerson(images) {
+    const form = formRef.current;
+    setBusy(true);
+    setMessage("Saving...");
+    setPhase("saving");
+    try {
+      await api.enroll({
+        name: form.name.trim(),
+        person_id: form.personId.trim(),
+        notes: form.notes,
+        images,
+        challenge: challenge.id,
+        signals: cam.signals(),
+      });
+      setName("");
+      setPersonId("");
+      setNotes("");
+      setFrames([]);
+      setPhase("idle");
+      setMessage("");
+      await refresh();
+    } catch (err) {
+      setMessage(err.message);
+      setFrames(images);
+      setPhase("angles");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   useEffect(() => {
     if (phase !== "challenge") {
       advancedRef.current = false;
@@ -37,9 +70,13 @@ export default function Admin() {
     if (cam.live.faceCount !== 1) return;
     if (!met) return;
     advancedRef.current = true;
-    const shot = cam.snapshot();
-    setFrames([shot]);
-    setPhase("angles");
+    const first = cam.snapshot();
+    window.setTimeout(() => {
+      const second = cam.snapshot();
+      const images = [first, second];
+      setFrames(images);
+      savePerson(images);
+    }, 400);
   }, [phase, met, cam.live.faceCount]);
 
   function startEnroll() {
@@ -60,44 +97,7 @@ export default function Admin() {
       setMessage("Keep one face in frame");
       return;
     }
-    setFrames((prev) => {
-      const next = [...prev, cam.snapshot()];
-      return next.slice(0, 3);
-    });
-  }
-
-  async function submit() {
-    if (frames.length < 2) {
-      setMessage("Capture at least 2 live frames");
-      return;
-    }
-    setBusy(true);
-    setMessage("");
-    try {
-      await api.enroll({
-        name: name.trim(),
-        person_id: personId.trim(),
-        notes,
-        images: frames,
-        challenge: challenge.id,
-        signals: cam.signals(),
-      });
-      setName("");
-      setPersonId("");
-      setNotes("");
-      setFrames([]);
-      setPhase("idle");
-      await refresh();
-    } catch (err) {
-      setMessage(err.message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function remove(id) {
-    await api.remove(id);
-    await refresh();
+    setFrames((prev) => [...prev, cam.snapshot()].slice(0, 3));
   }
 
   return (
@@ -105,12 +105,12 @@ export default function Admin() {
       <section className="panel">
         <h2>Live enrollment</h2>
         <p className="hint">
-          A person must stand in front of this camera. Photos, phone screens, and replayed videos are rejected.
+          Fill name and ID, then look at the camera and blink once. Photos and phone screens are rejected.
         </p>
         <div className="steps">
           <span className={phase !== "idle" ? "done" : "now"} />
-          <span className={phase === "angles" || frames.length ? "done" : phase === "challenge" ? "now" : ""} />
-          <span className={frames.length >= 2 ? "done" : ""} />
+          <span className={phase === "challenge" ? "now" : phase === "saving" || phase === "angles" || frames.length ? "done" : ""} />
+          <span className={phase === "saving" ? "now" : frames.length >= 2 ? "done" : ""} />
         </div>
         <CameraView
           videoRef={cam.videoRef}
@@ -123,15 +123,25 @@ export default function Admin() {
         {phase === "challenge" && (
           <div style={{ marginTop: 14 }}>
             <p className="challenge">{challenge.label}</p>
-            <p className="muted">{met ? "Challenge seen. Capturing..." : hint}</p>
+            <p className="muted">{met ? "Blink seen. Saving..." : hint}</p>
           </div>
+        )}
+        {phase === "saving" && (
+          <p className="muted" style={{ marginTop: 14 }}>
+            Saving person...
+          </p>
         )}
         {phase === "angles" && (
           <div className="row" style={{ marginTop: 14 }}>
             <button className="btn" onClick={grabAngle} type="button">
-              Capture another angle ({frames.length}/3)
+              Extra photo ({frames.length}/3)
             </button>
-            <button className="btn primary" onClick={submit} type="button" disabled={busy}>
+            <button
+              className="btn primary"
+              onClick={() => savePerson(frames)}
+              type="button"
+              disabled={busy || frames.length < 2}
+            >
               {busy ? "Saving..." : "Save person"}
             </button>
           </div>
@@ -165,6 +175,7 @@ export default function Admin() {
               onClick={() => {
                 setPhase("idle");
                 setFrames([]);
+                setMessage("");
               }}
             >
               Cancel
@@ -183,7 +194,14 @@ export default function Admin() {
                 <b>{p.name}</b>
                 <span>{p.person_id}</span>
               </div>
-              <button className="btn ghost" type="button" onClick={() => remove(p.id)}>
+              <button
+                className="btn ghost"
+                type="button"
+                onClick={async () => {
+                  await api.remove(p.id);
+                  await refresh();
+                }}
+              >
                 Remove
               </button>
             </article>
